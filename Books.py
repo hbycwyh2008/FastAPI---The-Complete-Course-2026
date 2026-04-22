@@ -8,6 +8,13 @@ Books = [
     {'title':'Title Five','author':'Author Five','Category':'Math'},
     {'title':'Title Six','author':'Author One','Category':'Science'},
 ]
-@app.get("/")
+@app.get("/books")
 async def read_books():
     return Books
+
+
+@app.get("/books/{book_title}")
+async def read_books(book_title: str):
+    for book in Books:
+        if book.get('title').casefold() == book_title.casefold():
+            return book
