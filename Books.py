@@ -1,5 +1,14 @@
 from fastapi import Body, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 BOOKS = [
     {'title':'Title One','author':'Author One','category':'Science'},
     {'title':'Title Two','author':'Author Two','category':'Science'},
@@ -45,14 +54,17 @@ async def create_book(new_book: dict = Body(...)):
 
 @app.put("/books/update_book")
 async def update_book(updated_book: dict = Body(...)):
-    for i in range (len(BOOKS)):
+    for i in range(len(BOOKS)):
         if BOOKS[i].get("title").casefold() == updated_book.get("title").casefold():
             BOOKS[i] = updated_book
+            return updated_book
+    raise HTTPException(status_code=404, detail="Book not found")
+
 
 @app.delete("/books/title/{book_title}")
 async def delete_book(book_title: str):
     for i, book in enumerate(BOOKS):
         if book.get("title", "").casefold() == book_title.casefold():
             BOOKS.pop(i)
-            break
-    
+            return book
+    raise HTTPException(status_code=404, detail="Book not found")

@@ -1,0 +1,75 @@
+# 每次 push（且变更不只在 push-runs/ 下）时，在仓库里新建唯一文件夹并写入 meta.json。
+# paths-ignore：仅修改 push-runs/ 的提交不触发本工作流，避免机器人回推后无限循环。
+name: Push snapshot folder
+
+on:
+  push:
+    branches:
+      - "**"
+    paths-ignore:
+      - "push-runs/**"
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create unique folder and meta.json
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+        run: |
+          SHORT_SHA=$(echo "$SHA" | cut -c1-7)
+          export SNAP_DIR="push-runs/run-${RUN_ID}-${SHORT_SHA}"
+          mkdir -p "$SNAP_DIR"
+          python3 -c "
+          import json, os
+          from pathlib import Path
+          sha = os.environ['SHA']
+          head_msg = ''
+          ep = os.environ.get('GITHUB_EVENT_PATH')
+          if ep:
+              ev = json.loads(Path(ep).read_text(encoding='utf-8'))
+              hc = ev.get('head_commit') or {}
+              head_msg = hc.get('message') or ''
+          meta = {
+              'run_id': os.environ['RUN_ID'],
+              'sha': sha,
+              'short_sha': sha[:7],
+              'ref': os.environ['REF'],
+              'actor': os.environ['ACTOR'],
+              'repository': os.environ['REPO'],
+              'head_commit_message': head_msg,
+          }
+          Path(os.environ['SNAP_DIR'], 'meta.json').write_text(
+              json.dumps(meta, indent=2, ensure_ascii=False) + '\n',
+              encoding='utf-8',
+          )
+          "
+
+      - name: Commit and push
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=$(echo "$SHA" | cut -c1-7)
+          SNAP_DIR="push-runs/run-${RUN_ID}-${SHORT_SHA}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SNAP_DIR"
+          if git diff --staged --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore: push snapshot ${RUN_ID}-${SHORT_SHA}"
+          git push
